@@ -1,0 +1,40 @@
+export const DEFAULT_LANG = 'en_US'
+
+const dict = {
+  'Starting Tor!': 0,
+  'Tor is running': 1,
+  'Tor is not ready': 2,
+  'Onion Services': 3,
+  Service: 4,
+  'Service Interface': 5,
+  Name: 6,
+  'Manage Onion Services': 7,
+  'Add and remove Tor onion services': 8,
+  'View Onion Addresses': 9,
+  'View the .onion addresses for your services': 10,
+  'You have no onion services': 11,
+  'Onion Addresses': 12,
+  'Create your first onion service': 13,
+  'Virtual Port': 14,
+  'Private Key (optional)': 15,
+  'Base64-encoded ed25519 private key for a vanity .onion address. Leave blank to auto-generate.': 16,
+  'Configure Relay': 17,
+  'Configure Tor relay and bridge settings': 18,
+  'Relay settings saved': 19,
+  'Tor SOCKS Proxy': 20,
+  'SOCKS5 proxy for private browsing': 21,
+  'A short, unique name for this onion service (e.g. my-bitcoin)': 22,
+  'The port number exposed on the .onion address': 23,
+  Enabled: 24,
+  Nickname: 25,
+  'Contact Info': 26,
+  'Bridge Mode': 27,
+  'OR Port': 28,
+  'Bandwidth Rate': 29,
+  'Bandwidth Burst': 30,
+  Relay: 31,
+} as const
+
+export type I18nKey = keyof typeof dict
+export type LangDict = Record<(typeof dict)[I18nKey], string>
+export default dict
