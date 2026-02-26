@@ -26,20 +26,24 @@ export const exportUrls = sdk.plugin.url.setupExportedUrls(
           if (!hostname) continue
 
           for (const [externalPort, portInfo] of Object.entries(svc.ports)) {
-            await sdk.plugin.url.exportUrl(effects, {
-              hostnameInfo: {
-                packageId: packageId === 'STARTOS' ? null : packageId,
-                hostId,
-                internalPort: portInfo.internalPort,
-                ssl: portInfo.ssl,
-                public: true,
-                hostname: hostname.trim(),
-                port: parseInt(externalPort, 10),
-                info: null,
-              },
-              removeAction: deleteOnionService,
-              overflowActions: [],
-            })
+            await sdk.plugin.url
+              .exportUrl(effects, {
+                hostnameInfo: {
+                  packageId: packageId === 'STARTOS' ? null : packageId,
+                  hostId,
+                  internalPort: portInfo.internalPort,
+                  ssl: portInfo.ssl,
+                  public: true,
+                  hostname: hostname.trim(),
+                  port: parseInt(externalPort, 10),
+                  info: null,
+                },
+                removeAction: deleteOnionService,
+                overflowActions: [],
+              })
+              .catch((e) => {
+                console.error('Failed to export url', e)
+              })
           }
         }
       }

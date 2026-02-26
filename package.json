@@ -6,7 +6,9 @@
     "check": "tsc --noEmit"
   },
   "dependencies": {
-    "@start9labs/start-sdk": "^0.4.0-beta.51"
+    "@start9labs/start-sdk": "^0.4.0-beta.54",
+    "rfc4648": "^1.5.4",
+    "@noble/curves": "*"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

@@ -1,3 +1,4 @@
+import { rm } from 'fs/promises'
 import { hsDir, torrc } from '../fileModels/torrc'
 import { i18n } from '../i18n'
 import { sdk } from '../sdk'
@@ -73,6 +74,10 @@ export const deleteOnionService = sdk.Action.withInput(
       // If no ports remain, remove the entire entry
       if (Object.keys(svc.ports).length === 0) {
         delete services[key]
+        await rm(sdk.volumes.tor.subpath(hsDir(packageId, hostId, key)), {
+          recursive: true,
+          force: true,
+        })
       }
       break
     }

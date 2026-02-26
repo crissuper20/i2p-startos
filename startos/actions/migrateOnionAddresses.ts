@@ -1,8 +1,9 @@
 import { FileHelper, z } from '@start9labs/start-sdk'
+import { rename } from 'fs/promises'
 import { hsDir, nextKey, torrc } from '../fileModels/torrc'
 import { i18n } from '../i18n'
 import { sdk } from '../sdk'
-import { rename } from 'fs/promises'
+import { generateOnionFiles } from '../utils'
 
 const { InputSpec, Value } = sdk
 
@@ -164,12 +165,10 @@ export const migrateOnionAddresses = sdk.Action.withInput(
       const entryKey = nextKey(onionServices[packageId][hostId])
       onionServices[packageId][hostId][entryKey] = { ports }
 
-      const header = Buffer.from('== ed25519v1-secret: type0 ==\x00\x00\x00')
-      const keyBytes = Buffer.from(key, 'base64')
-      await sdk.volumes.tor.writeFile(
-        `${hsDir(packageId, hostId, entryKey)}/hs_ed25519_secret_key`,
-        Buffer.concat([header, keyBytes]),
-      )
+      const dir = hsDir(packageId, hostId, entryKey)
+      const { secretKey, hostname } = generateOnionFiles(key)
+      await sdk.volumes.tor.writeFile(`${dir}/hs_ed25519_secret_key`, secretKey)
+      await sdk.volumes.tor.writeFile(`${dir}/hostname`, hostname + '\n')
     }
 
     await torrc.write(effects, {

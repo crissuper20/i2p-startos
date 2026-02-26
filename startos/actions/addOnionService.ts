@@ -1,6 +1,7 @@
 import { hsDir, nextKey, torrc } from '../fileModels/torrc'
 import { i18n } from '../i18n'
 import { sdk } from '../sdk'
+import { generateOnionFiles } from '../utils'
 
 const { InputSpec, Value, Variants } = sdk
 
@@ -8,7 +9,7 @@ const privateKeySpec = InputSpec.of({
   privateKey: Value.text({
     name: i18n('Private Key (optional)'),
     description: i18n(
-      'Base64-encoded ed25519 private key for a vanity .onion address. Leave blank to auto-generate.',
+      'Base64-encoded ed25519 expanded private key for a vanity .onion address. Leave blank to auto-generate.',
     ),
     required: false,
     default: null,
@@ -21,8 +22,8 @@ const privateKeySpec = InputSpec.of({
     ],
     masked: true,
     inputmode: 'text',
-    minLength: 128,
-    maxLength: 128,
+    minLength: 88,
+    maxLength: 88,
   }),
 })
 
@@ -33,33 +34,12 @@ const inputSpec = InputSpec.of({
     hostId: string
     internalPort: number
   }>(),
-}).add(({ Value }) => ({
-  alsoSsl: Value.dynamicToggle(async ({ effects, prefill }) => {
-    let disabled = true
-
-    if (
-      prefill?.urlPluginMetadata?.packageId &&
-      prefill.urlPluginMetadata.interfaceId
-    ) {
-      const iface = await sdk.serviceInterface
-        .get(effects, {
-          packageId: prefill?.urlPluginMetadata?.packageId,
-          id: prefill.urlPluginMetadata.interfaceId,
-        })
-        .once()
-      if (iface?.addressInfo?.internalPort) {
-        disabled =
-          !iface?.host?.bindings[iface.addressInfo?.internalPort].options.addSsl
-      }
-    }
-
-    return {
-      name: i18n('Also SSL'),
-      description: i18n('Also serve this address with SSL'),
-      default: false,
-      disabled: disabled ? i18n('This interface does not support SSL') : false,
-    }
+  ssl: Value.toggle({
+    name: i18n('SSL'),
+    description: i18n('Serve this address with SSL'),
+    default: false,
   }),
+}).add(({ Value }) => ({
   address: Value.dynamicUnion(async ({ prefill }) => {
     const { packageId, hostId, internalPort } = prefill?.urlPluginMetadata ?? {}
 
@@ -67,14 +47,6 @@ const inputSpec = InputSpec.of({
     const entries =
       (packageId && hostId && config?.onionServices?.[packageId]?.[hostId]) ||
       {}
-
-    // Determine the non-SSL target for this binding so we can check if it's already served
-    let nonSslTarget: string | undefined
-    if (packageId && internalPort != null) {
-      const defaultHost =
-        packageId === 'STARTOS' ? 'startos' : `${packageId}.startos`
-      nonSslTarget = `${defaultHost}:${internalPort}`
-    }
 
     const variants: Record<
       string,
@@ -85,14 +57,15 @@ const inputSpec = InputSpec.of({
     > = {}
 
     for (const [key, entry] of Object.entries(entries)) {
-      // Skip if this entry already serves this binding (non-SSL)
-      if (
-        nonSslTarget &&
-        Object.values(entry.ports).every(
-          (p) => p.ssl || p.target !== nonSslTarget,
-        )
+      if (internalPort == null) continue
+
+      // Show address only if it partially serves this binding (has one of SSL/non-SSL but not both)
+      const bindingPorts = Object.values(entry.ports).filter(
+        (p) => p.internalPort === internalPort,
       )
-        continue
+      const hasNonSsl = bindingPorts.some((p) => !p.ssl)
+      const hasSsl = bindingPorts.some((p) => p.ssl)
+      if (hasNonSsl === hasSsl) continue // skip if has both or neither
 
       let hostname = key
       try {
@@ -138,7 +111,30 @@ export const addOnionService = sdk.Action.withInput(
   }),
 
   // input spec
-  inputSpec,
+  async ({ effects, prefill }) => {
+    const p = prefill as typeof inputSpec._PARTIAL
+    let noSsl = true
+
+    if (p?.urlPluginMetadata?.packageId && p.urlPluginMetadata.interfaceId) {
+      const iface = await sdk.serviceInterface
+        .get(effects, {
+          packageId: p?.urlPluginMetadata?.packageId,
+          id: p.urlPluginMetadata.interfaceId,
+        })
+        .once()
+      if (iface?.addressInfo?.internalPort) {
+        noSsl =
+          !iface?.host?.bindings[iface.addressInfo?.internalPort].options.addSsl
+      }
+    }
+
+    return inputSpec.filter(
+      {
+        ssl: !noSsl,
+      },
+      true,
+    )
+  },
 
   // pre-fill (none needed - system provides urlPluginMetadata)
   async () => null,
@@ -163,34 +159,13 @@ export const addOnionService = sdk.Action.withInput(
     const host = iface?.host
     const binding = host?.bindings[internalPort]
 
-    // Build port entries: Record<externalPort, { target, ssl, internalPort }>
+    // Build port entry: either SSL or non-SSL based on toggle
     const newPorts: Record<
       string,
       { target: string; ssl: boolean; internalPort: number }
     > = {}
 
-    if (packageId === 'STARTOS') {
-      newPorts['80'] = {
-        target: `${defaultHost}:80`,
-        ssl: false,
-        internalPort: 80,
-      }
-    } else if (binding?.enabled) {
-      newPorts[String(binding.options.preferredExternalPort)] = {
-        target: `${defaultHost}:${internalPort}`,
-        ssl: false,
-        internalPort,
-      }
-    } else {
-      newPorts[String(internalPort)] = {
-        target: `${defaultHost}:${internalPort}`,
-        ssl: false,
-        internalPort,
-      }
-    }
-
-    // Add SSL port if requested
-    if (input.alsoSsl && binding?.options.addSsl) {
+    if (input.ssl && binding?.options.addSsl) {
       const sslAddr = binding.addresses.available.find(
         (a) =>
           a.ssl &&
@@ -204,10 +179,30 @@ export const addOnionService = sdk.Action.withInput(
           internalPort,
         }
       }
+    } else {
+      if (packageId === 'STARTOS') {
+        newPorts['80'] = {
+          target: `${defaultHost}:80`,
+          ssl: false,
+          internalPort: 80,
+        }
+      } else if (binding?.enabled) {
+        newPorts[String(binding.options.preferredExternalPort)] = {
+          target: `${defaultHost}:${internalPort}`,
+          ssl: false,
+          internalPort,
+        }
+      } else {
+        newPorts[String(internalPort)] = {
+          target: `${defaultHost}:${internalPort}`,
+          ssl: false,
+          internalPort,
+        }
+      }
     }
 
     const config = await torrc.read().once()
-    const onionServices = structuredClone(config?.onionServices || {})
+    const onionServices = config?.onionServices || {}
     if (!onionServices[packageId]) onionServices[packageId] = {}
     if (!onionServices[packageId][hostId]) onionServices[packageId][hostId] = {}
 
@@ -217,6 +212,20 @@ export const addOnionService = sdk.Action.withInput(
       // Reuse existing address by key
       const existing = services[address.selection]
       if (existing) {
+        const duplicate = Object.values(existing.ports).some(
+          (p) => p.ssl === !!input.ssl && p.internalPort === internalPort,
+        )
+        if (duplicate) {
+          throw new Error(
+            input.ssl
+              ? i18n(
+                  'This onion address already has an SSL binding for this port',
+                )
+              : i18n(
+                  'This onion address already has a non-SSL binding for this port',
+                ),
+          )
+        }
         services[address.selection] = {
           ports: { ...existing.ports, ...newPorts },
         }
@@ -226,13 +235,12 @@ export const addOnionService = sdk.Action.withInput(
       const key = nextKey(services)
       services[key] = { ports: newPorts }
 
-      // Write private key if provided
-      if (address.value.privateKey) {
-        await sdk.volumes.tor.writeFile(
-          `${hsDir(packageId, hostId, key)}/hs_ed25519_secret_key`,
-          Buffer.from(address.value.privateKey, 'base64'),
-        )
-      }
+      const dir = hsDir(packageId, hostId, key)
+      const { secretKey, hostname } = generateOnionFiles(
+        address.value.privateKey,
+      )
+      await sdk.volumes.tor.writeFile(`${dir}/hs_ed25519_secret_key`, secretKey)
+      await sdk.volumes.tor.writeFile(`${dir}/hostname`, hostname + '\n')
     }
 
     await torrc.write(effects, {

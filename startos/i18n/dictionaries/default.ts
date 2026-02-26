@@ -15,7 +15,7 @@ const dict = {
   'Onion Addresses': 12,
   'Create your first onion service': 13,
   'Private Key (optional)': 15,
-  'Base64-encoded ed25519 private key for a vanity .onion address. Leave blank to auto-generate.': 16,
+  'Base64-encoded ed25519 expanded private key for a vanity .onion address. Leave blank to auto-generate.': 16,
   'Configure Relay': 17,
   'Configure Tor relay and bridge settings': 18,
   'Relay settings saved': 19,
@@ -35,8 +35,8 @@ const dict = {
   'Add a Tor onion service for this URL': 35,
   'Delete Onion Service': 36,
   'Remove a Tor onion service': 37,
-  'Also SSL': 38,
-  'Also serve this address with SSL': 39,
+  SSL: 38,
+  'Serve this address with SSL': 39,
   Address: 40,
   'Create new address': 41,
   'Confirm you would like to delete this .onion address': 42,
@@ -46,6 +46,8 @@ const dict = {
   'Onion Address': 46,
   'Select which .onion addresses to import': 47,
   'This interface does not support SSL': 48,
+  'This onion address already has an SSL binding for this port': 49,
+  'This onion address already has a non-SSL binding for this port': 50,
 } as const
 
 export type I18nKey = keyof typeof dict
