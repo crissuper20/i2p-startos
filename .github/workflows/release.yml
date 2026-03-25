@@ -45,9 +45,15 @@ jobs:
         run: |
           mkdir -p ~/.startos
           openssl genpkey -algorithm ed25519 -outform PEM -out ~/.startos/developer.key.pem
+          chmod 444 ~/.startos/developer.key.pem
+          echo "--- key after generation ---"
+          xxd ~/.startos/developer.key.pem | head -3
 
       - name: Build s9pk
-        run: make ${{ matrix.arch }}
+        run: |
+          echo "--- key before build ---"
+          xxd ~/.startos/developer.key.pem | head -3
+          make ${{ matrix.arch }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
