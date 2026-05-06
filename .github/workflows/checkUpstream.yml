@@ -22,39 +22,54 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Current pinned: $VERSION"
 
-      - name: Get latest i2pd in Alpine edge
+      - name: Pull Alpine edge and get latest i2pd version + digest
         id: latest
         run: |
+          # Explicit pull first so docker inspect always has the image in cache
+          docker pull alpine:edge
+          # apk search -e gives exact-match output like "i2pd-2.60.0-r0"
           FULL=$(docker run --rm alpine:edge sh -c \
-            "apk update -q 2>/dev/null && apk policy i2pd 2>/dev/null" \
+            "apk update -q 2>/dev/null && apk search -e i2pd 2>/dev/null" \
             | grep -oP '\d+\.\d+\.\d+-r\d+' | head -1)
+          # Grab the manifest-list digest of the image that was just pulled
+          DIGEST=$(docker inspect alpine:edge --format '{{index .RepoDigests 0}}' | cut -d@ -f2)
           echo "version=$FULL" >> "$GITHUB_OUTPUT"
-          echo "Alpine edge has: $FULL"
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "Alpine edge has i2pd: $FULL  (digest: $DIGEST)"
 
-      - name: Open PR if outdated
+      - name: Open PR if i2pd version changed
         if: steps.current.outputs.version != steps.latest.outputs.version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CURRENT: ${{ steps.current.outputs.version }}
+          LATEST: ${{ steps.latest.outputs.version }}
+          DIGEST: ${{ steps.latest.outputs.digest }}
         run: |
-          CURRENT="${{ steps.current.outputs.version }}"
-          LATEST="${{ steps.latest.outputs.version }}"
           BRANCH="bump-i2pd-${LATEST}"
 
-          # Also grab the new digest for the base image
-          DIGEST=$(docker inspect alpine:edge --format '{{index .RepoDigests 0}}' | cut -d@ -f2)
+          # "2.60.0-r0" → semver "2.60.0"
+          SEMVER=$(echo "$LATEST" | grep -oP '^\d+\.\d+\.\d+')
+          # "2.60.0" → TS identifier fragment "2_60_0"
+          IDENT="${SEMVER//./_}"
+          NEW_CONST="v_${IDENT}_0_b0"
+          NEW_FILE="startos/versions/v${SEMVER}.0.b0.ts"
+          OLD_CONST=$(grep -oP 'current: \K\w+' startos/versions/index.ts)
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git checkout -b "$BRANCH"
+
           sed -i "s/^ARG I2PD_VERSION=.*/ARG I2PD_VERSION=${LATEST}/" Dockerfile
           sed -i "s|alpine:edge@sha256:[a-f0-9]*|alpine:edge@${DIGEST}|" Dockerfile
-          git add Dockerfile
+
+          python3 .github/scripts/gen_version.py
+
+          git add Dockerfile "$NEW_FILE" startos/versions/index.ts
           git commit -m "chore: bump i2pd ${CURRENT} → ${LATEST}"
           git push origin "$BRANCH"
 
           gh pr create \
             --title "chore: bump i2pd ${CURRENT} → ${LATEST}" \
-            --body "Automated upstream bump from Alpine edge. i2pd \`${LATEST}\` is now available (was \`${CURRENT}\`)." \
-            --base update/040 \
+            --body "$(printf 'Automated upstream bump.\n\n- i2pd \`%s\` is now available on Alpine edge (was \`%s\`).\n- Alpine edge digest updated.\n- StarOS version file \`%s\` created and \`startos/versions/index.ts\` updated.\n\n> **Review the generated release notes in \`%s\` before merging.**' "$LATEST" "$CURRENT" "$NEW_FILE" "$NEW_FILE")" \
+            --base main \
             --head "$BRANCH"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

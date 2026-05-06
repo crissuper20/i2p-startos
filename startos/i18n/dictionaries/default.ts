@@ -60,6 +60,20 @@ const dict = {
   'Known routers': 56,
   'no change. Router database may already be up to date': 57,
   'Reseed could not be verified. Check I2P logs for details.': 58,
+  'I2P Router Console': 59,
+  'Web console for monitoring and managing the I2P router': 60,
+  'I2P SSU2 Transport': 61,
+  'I2P SSU2 peer-to-peer transport port': 62,
+  'I2P NTCP2 Transport': 63,
+  'I2P NTCP2 peer-to-peer transport port': 64,
+  'Could not fetch console token — is i2pd running?': 65,
+  'External IP / Hostname': 66,
+  'Public IP or hostname for incoming I2P connections. Set to your VPS or port-forwarded router IP to fix double-NAT Symmetric NAT classification. Requires UDP port 4450 forwarded to this machine. Leave blank to auto-detect.': 67,
+  'e.g. 203.0.113.10 or vpn.example.com': 68,
+  'Custom Reseed URL': 69,
+  'HTTPS URL of a custom i2p reseed server (su3 format). Set to your own i2pd floodfill node\'s reseed endpoint to bootstrap the peer pool with known O-type peers from the start. Leave blank to use default reseed servers.': 70,
+  'Must be an HTTPS URL': 71,
+  'e.g. https://your-vps.example.com/i2pseeds.su3': 72,
 } as const
 
 export type I18nKey = keyof typeof dict

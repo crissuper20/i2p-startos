@@ -40,7 +40,7 @@ jobs:
 
       - name: Install start-cli
         run: |
-          CLI_VERSION="v0.4.0-alpha.22"
+          CLI_VERSION="v0.4.0-beta.7"
           curl -fsSL "https://github.com/Start9Labs/start-os/releases/download/${CLI_VERSION}/start-cli_x86_64-linux" -o /usr/local/bin/start-cli
           chmod +x /usr/local/bin/start-cli
           start-cli --version
@@ -81,5 +81,5 @@ jobs:
         with:
           files: artifacts/*.s9pk
           generate_release_notes: true
-          prerelease: true
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
           make_latest: true

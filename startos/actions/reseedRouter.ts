@@ -34,8 +34,42 @@ function fetchRouterCount(): Promise<number | null> {
   })
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+/**
+ * Fetches token + available command names from i2pd's command page.
+ */
+function fetchConsoleInfo(): Promise<{
+  token: string | null
+  commands: Set<string>
+}> {
+  return new Promise((resolve) => {
+    const req = http.request(
+      { host: '127.0.0.1', port: 7070, path: '/?page=commands', method: 'GET' },
+      (res) => {
+        let body = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => {
+          body += chunk
+        })
+        res.on('end', () => {
+          const tokenMatch = body.match(/token=(\d+)/)
+          const commands = new Set<string>()
+          for (const m of body.matchAll(/cmd=([a-z_]+)/g)) {
+            commands.add(m[1])
+          }
+          resolve({
+            token: tokenMatch ? tokenMatch[1] : null,
+            commands,
+          })
+        })
+      },
+    )
+    req.setTimeout(5000, () => {
+      req.destroy()
+      resolve({ token: null, commands: new Set<string>() })
+    })
+    req.on('error', () => resolve({ token: null, commands: new Set<string>() }))
+    req.end()
+  })
 }
 
 export const reseedRouter = sdk.Action.withInput(
@@ -59,12 +93,34 @@ export const reseedRouter = sdk.Action.withInput(
   async () => {
     const beforeCount = await fetchRouterCount()
 
+    // i2pd's web console requires a per-session CSRF token for all commands.
+    // Without it the server rejects the request and closes the socket,
+    // producing the misleading "socket hang up" error that surfaced previously.
+    const consoleInfo = await fetchConsoleInfo()
+    const token = consoleInfo.token
+    if (!token) {
+      throw new Error(
+        i18n('Could not fetch console token — is i2pd running?'),
+      )
+    }
+
+    // i2pd command names vary across versions/builds.
+    const reseedCmd =
+      ['run_reseed', 'reseed', 'force_reseed'].find((cmd) =>
+        consoleInfo.commands.has(cmd),
+      ) ?? null
+    if (!reseedCmd) {
+      throw new Error('This i2pd build does not expose a reseed command')
+    }
+
+    // The request blocks until reseed finishes; this can take 60–120 seconds
+    // on a slow connection.
     await new Promise<void>((resolve, reject) => {
       const req = http.request(
         {
           host: '127.0.0.1',
           port: 7070,
-          path: '/?cmd=force_reseed',
+          path: `/?cmd=${reseedCmd}&token=${token}`,
           method: 'GET',
         },
         (res) => {
@@ -78,7 +134,7 @@ export const reseedRouter = sdk.Action.withInput(
           }
         },
       )
-      req.setTimeout(30000, () => {
+      req.setTimeout(180000, () => {
         req.destroy()
         reject(new Error('Reseed request timed out'))
       })
@@ -88,29 +144,18 @@ export const reseedRouter = sdk.Action.withInput(
       req.end()
     })
 
-    // Give i2pd time to contact reseed servers and integrate new routers
-    await delay(5000)
-
-    const afterCount = await fetchRouterCount()
-
-    let message: string
-    if (beforeCount !== null && afterCount !== null) {
-      const diff = afterCount - beforeCount
-      if (diff > 0) {
-        message = `${i18n('Reseed successful')}. ${i18n('Known routers')}: ${beforeCount} → ${afterCount} (+${diff}).`
-      } else {
-        message = `${i18n('Reseed completed')}. ${i18n('Known routers')}: ${afterCount} (${i18n('no change. Router database may already be up to date')}).`
-      }
-    } else if (afterCount !== null) {
-      message = `${i18n('Reseed completed')}. ${i18n('Known routers')}: ${afterCount}.`
-    } else {
-      message = i18n('Reseed could not be verified. Check I2P logs for details.')
-    }
+    // Report the current count at the time of the request. i2pd integrates
+    // new router infos in the background over 30–60 seconds; there is no
+    // point waiting here — the count will rise on its own.
+    const countStr =
+      beforeCount !== null
+        ? ` ${i18n('Known routers')}: ${beforeCount}.`
+        : ''
 
     return {
       version: '1' as const,
       title: i18n('Reseed Results'),
-      message,
+      message: `${i18n('Reseed successful')}.${countStr}`,
       result: null,
     }
   },

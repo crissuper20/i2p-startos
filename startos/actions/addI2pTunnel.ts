@@ -1,7 +1,7 @@
 import { i2pdConfig, nextKey, tunnelDir, syncConfigToFiles } from '../fileModels/i2pd'
 import { i18n } from '../i18n'
 import { sdk } from '../sdk'
-import { generateI2pKey } from '../utils'
+import { generateI2pKey, reloadI2pdTunnels } from '../utils'
 
 const { InputSpec, Value, Variants } = sdk
 
@@ -114,6 +114,11 @@ export const addI2pTunnel = sdk.Action.withInput(
   async () => null,
 
   async ({ effects, input }) => {
+    if (!input.urlPluginMetadata) {
+      throw new Error(
+        'This action must be invoked through the URL plugin',
+      )
+    }
     const { packageId, hostId, interfaceId, internalPort } =
       input.urlPluginMetadata
     const address = input.address as {
@@ -221,8 +226,7 @@ export const addI2pTunnel = sdk.Action.withInput(
     }
     await i2pdConfig.write(effects, updatedConfig)
     await syncConfigToFiles(updatedConfig)
-
-    // i2pd watches tunnels.conf for changes and hot-reloads it automatically.
+    await reloadI2pdTunnels()
     return null
   },
 )

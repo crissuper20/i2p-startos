@@ -50,5 +50,73 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   const sockReceipt = await socksOrigin.export([socksInterface])
   const httpReceipt = await httpOrigin.export([httpInterface])
 
-  return [sockReceipt, httpReceipt]
+  const consoleMulti = sdk.MultiHost.of(effects, 'console-multi')
+  const consoleOrigin = await consoleMulti.bindPort(7070, {
+    protocol: null,
+    preferredExternalPort: 7070,
+    addSsl: null,
+    secure: { ssl: false },
+  })
+
+  const consoleInterface = sdk.createInterface(effects, {
+    name: i18n('I2P Router Console'),
+    id: 'console',
+    description: i18n(
+      'Web console for monitoring and managing the I2P router',
+    ),
+    type: 'ui',
+    masked: false,
+    schemeOverride: { ssl: null, noSsl: 'http' },
+    username: null,
+    path: '',
+    query: {},
+  })
+
+  const consoleReceipt = await consoleOrigin.export([consoleInterface])
+
+  // Bind the SSU2 (UDP-like TCP fallback) and NTCP2 transport ports so
+  // StartOS / UPnP can forward them from the external network.  Without
+  // a consistent external port mapping i2pd shows "Firewalled - Symmetric NAT"
+  // and inbound tunnel delivery fails, which breaks server tunnels.
+  const ssu2Multi = sdk.MultiHost.of(effects, 'ssu2-multi')
+  const ssu2Origin = await ssu2Multi.bindPort(4450, {
+    protocol: null,
+    preferredExternalPort: 4450,
+    addSsl: null,
+    secure: { ssl: false },
+  })
+  const ssu2Interface = sdk.createInterface(effects, {
+    name: i18n('I2P SSU2 Transport'),
+    id: 'ssu2',
+    description: i18n('I2P SSU2 peer-to-peer transport port'),
+    type: 'p2p',
+    masked: false,
+    schemeOverride: null,
+    username: null,
+    path: '',
+    query: {},
+  })
+  const ssu2Receipt = await ssu2Origin.export([ssu2Interface])
+
+  const ntcp2Multi = sdk.MultiHost.of(effects, 'ntcp2-multi')
+  const ntcp2Origin = await ntcp2Multi.bindPort(4451, {
+    protocol: null,
+    preferredExternalPort: 4451,
+    addSsl: null,
+    secure: { ssl: false },
+  })
+  const ntcp2Interface = sdk.createInterface(effects, {
+    name: i18n('I2P NTCP2 Transport'),
+    id: 'ntcp2',
+    description: i18n('I2P NTCP2 peer-to-peer transport port'),
+    type: 'p2p',
+    masked: false,
+    schemeOverride: null,
+    username: null,
+    path: '',
+    query: {},
+  })
+  const ntcp2Receipt = await ntcp2Origin.export([ntcp2Interface])
+
+  return [sockReceipt, httpReceipt, consoleReceipt, ssu2Receipt, ntcp2Receipt]
 })

@@ -40,6 +40,35 @@ const inputSpec = InputSpec.of({
       debug: i18n('Debug'),
     },
   }),
+  externalHost: Value.text({
+    name: i18n('External IP / Hostname'),
+    description: i18n(
+      'Public IP or hostname for incoming I2P connections. Set to your VPS or port-forwarded router IP to fix double-NAT Symmetric NAT classification. Requires UDP port 4450 forwarded to this machine. Leave blank to auto-detect.',
+    ),
+    required: false,
+    default: null,
+    patterns: [],
+    minLength: null,
+    maxLength: 253,
+    placeholder: i18n('e.g. 203.0.113.10 or vpn.example.com'),
+  }),
+  reseedUrl: Value.text({
+    name: i18n('Custom Reseed URL'),
+    description: i18n(
+      'HTTPS URL of a custom i2p reseed server (su3 format). Set to your own i2pd floodfill node\'s reseed endpoint to bootstrap the peer pool with known O-type peers from the start. Leave blank to use default reseed servers.',
+    ),
+    required: false,
+    default: null,
+    patterns: [
+      {
+        regex: '^https://',
+        description: i18n('Must be an HTTPS URL'),
+      },
+    ],
+    minLength: null,
+    maxLength: 2048,
+    placeholder: i18n('e.g. https://your-vps.example.com/i2pseeds.su3'),
+  }),
 })
 
 export const configureRouter = sdk.Action.withInput(
@@ -63,6 +92,8 @@ export const configureRouter = sdk.Action.withInput(
       bandwidth: config?.router?.bandwidth ?? 'O',
       transit: config?.router?.transit ?? true,
       loglevel: config?.router?.loglevel ?? 'warn',
+      externalHost: config?.router?.externalHost ?? null,
+      reseedUrl: config?.router?.reseedUrl ?? null,
     }
   },
 
@@ -88,6 +119,8 @@ export const configureRouter = sdk.Action.withInput(
         bandwidth: input.bandwidth,
         transit: input.transit,
         loglevel: input.loglevel,
+        externalHost: input.externalHost ?? undefined,
+        reseedUrl: input.reseedUrl ?? undefined,
       },
     }
 

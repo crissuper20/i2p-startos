@@ -1,6 +1,8 @@
+import { rm } from 'fs/promises'
 import { i2pdConfig, tunnelDir, syncConfigToFiles } from '../fileModels/i2pd'
 import { i18n } from '../i18n'
 import { sdk } from '../sdk'
+import { reloadI2pdTunnels } from '../utils'
 
 const { InputSpec, Value } = sdk
 
@@ -69,8 +71,10 @@ export const deleteI2pTunnel = sdk.Action.withInput(
       // If no ports remain, remove the entire entry and clean up files
       if (Object.keys(svc.ports).length === 0) {
         delete services[key]
-        // SDK doesn't have a delete method, so we can't clean up .dat key files.
-        // The orphaned key is harmless but wastes ~679 bytes on disk per deleted tunnel.
+        await rm(
+          sdk.volumes.i2pd.subpath(tunnelDir(packageId, hostId, key)),
+          { recursive: true, force: true },
+        )
       }
       break
     }
@@ -90,8 +94,6 @@ export const deleteI2pTunnel = sdk.Action.withInput(
     }
     await i2pdConfig.write(effects, updatedConfig)
     await syncConfigToFiles(updatedConfig)
-
-    // Note: i2pd should reload config automatically when the file changes
-    // The SDK doesn't expose a daemon signal method, so SIGHUP reload isn't available
+    await reloadI2pdTunnels()
   },
 )

@@ -28,7 +28,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
           command: [
             'sh',
             '-c',
-            'chmod -R 755 /var/lib/i2pd && chown -R i2pd:i2pd /var/lib/i2pd',
+            'chmod -R 755 /var/lib/i2pd && chown -R i2pd:i2pd /var/lib/i2pd && [ -e /var/lib/i2pd/certificates ] || ln -s /usr/share/i2pd/certificates /var/lib/i2pd/certificates',
           ],
           user: 'root',
         },

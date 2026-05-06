@@ -1,4 +1,5 @@
-import { createHash, getDiffieHellman } from 'crypto'
+import { createHash, createDiffieHellmanGroup } from 'crypto'
+import * as http from 'http'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { base32 } from 'rfc4648'
 
@@ -28,7 +29,7 @@ export function generateI2pKey(): { keyfile: Buffer; hostname: string } {
   const edPub = ed25519.utils.getExtendedPublicKey(edSeed).pointBytes
 
   // ElGamal encryption key pair — i2p uses RFC 3526 modp14 (2048-bit DH group)
-  const elg = getDiffieHellman('modp14')
+  const elg = createDiffieHellmanGroup('modp14')
   elg.generateKeys()
 
   // Pad keys to exactly 256 bytes (big-endian, in case DH drops leading zeros)
@@ -56,4 +57,60 @@ export function generateI2pKey(): { keyfile: Buffer; hostname: string } {
   const keyfile = Buffer.concat([destination, Buffer.from(edSeed), elgPriv])
 
   return { keyfile, hostname }
+}
+
+/**
+ * Signal i2pd to reload tunnels.conf without a full restart.
+ *
+ * i2pd does NOT watch tunnels.conf for changes automatically — the reload must
+ * be triggered explicitly after the file is written.  The WebConsole requires a
+ * session token (embedded in every page), so we fetch it first and then issue
+ * the reload command.  Errors are silently ignored: the call is best-effort and
+ * will naturally fail during the init phase when i2pd hasn't started yet.
+ */
+export function reloadI2pdTunnels(): Promise<void> {
+  return new Promise((resolve) => {
+    // Step 1: fetch any page to extract the session token
+    const tokenReq = http.request(
+      { host: '127.0.0.1', port: 7070, path: '/?page=commands', method: 'GET' },
+      (res) => {
+        let body = ''
+        res.on('data', (chunk) => (body += chunk))
+        res.on('end', () => {
+          const match = body.match(/token=(\d+)/)
+          if (!match) {
+            resolve()
+            return
+          }
+          const token = match[1]
+
+          // Step 2: trigger reload
+          const reloadReq = http.request(
+            {
+              host: '127.0.0.1',
+              port: 7070,
+              path: `/?cmd=reload_tunnels_config&token=${token}`,
+              method: 'GET',
+            },
+            (res2) => {
+              res2.resume()
+              resolve()
+            },
+          )
+          reloadReq.setTimeout(5000, () => {
+            reloadReq.destroy()
+            resolve()
+          })
+          reloadReq.on('error', () => resolve())
+          reloadReq.end()
+        })
+      },
+    )
+    tokenReq.setTimeout(5000, () => {
+      tokenReq.destroy()
+      resolve()
+    })
+    tokenReq.on('error', () => resolve())
+    tokenReq.end()
+  })
 }
